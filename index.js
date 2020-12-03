@@ -12,7 +12,7 @@ try {
   // noop
 }
 
-const noop = () => {};
+const noop = () => { };
 
 let homebrideAPI, Service, Characteristic;
 
@@ -282,6 +282,15 @@ class XiaomiRoborockVacuum {
       }
     }
 
+    if (this.config.gotoTarget) {
+      if (this.config.gotoTarget.target && this.config.gotoTarget.target.length == 2) {
+        var name = this.config.gotoTarget.name || 'Go to';
+        this.services.gotoTarget = new Service.Switch(name, 'GotoTargetSwitch');
+        this.services.gotoTarget.getCharacteristic(Characteristic.On).on('get', (cb) => callbackify(() => this.getGotoTarget(), cb)).
+          on('set', (newState, cb) => callbackify(() => this.setGotoTarget(newState, this.config.gotoTarget.target), cb));
+      }
+    }
+
     // ADDITIONAL HOMEKIT SERVICES
     this.initialiseCareServices();
   }
@@ -523,8 +532,7 @@ class XiaomiRoborockVacuum {
         `MON changedCleaning | ${this.model} | CleaningState is now ${isCleaning}`
       );
       this.log.info(
-        `INF changedCleaning | ${this.model} | Cleaning is ${
-          isCleaning ? "ON" : "OFF"
+        `INF changedCleaning | ${this.model} | Cleaning is ${isCleaning ? "ON" : "OFF"
         }.`
       );
       if (!isCleaning) {
@@ -550,8 +558,7 @@ class XiaomiRoborockVacuum {
           `MON changedPause | ${this.model} | CleaningState is now ${isCleaning}`
         );
         this.log.info(
-          `INF changedPause | ${this.model} | ${
-            isCleaning ? "Paused possible" : "Paused not possible, no cleaning"
+          `INF changedPause | ${this.model} | ${isCleaning ? "Paused possible" : "Paused not possible, no cleaning"
           }`
         );
       }
@@ -575,8 +582,7 @@ class XiaomiRoborockVacuum {
         `MON changedCharging | ${this.model} | ChargingState is now ${isCharging}`
       );
       this.log.info(
-        `INF changedCharging | ${this.model} | Charging is ${
-          isCharging ? "active" : "cancelled"
+        `INF changedCharging | ${this.model} | Charging is ${isCharging ? "active" : "cancelled"
         }`
       );
     }
@@ -750,7 +756,7 @@ class XiaomiRoborockVacuum {
         clearTimeout(this.connectRetry);
         // Using setTimeout instead of holding the promise. This way we'll keep retrying but not holding the other actions
         this.connectRetry = setTimeout(
-          () => this.connect().catch(() => {}),
+          () => this.connect().catch(() => { }),
           120000
         );
         throw error;
@@ -907,8 +913,7 @@ class XiaomiRoborockVacuum {
         if (this.roomIdsToClean.size > 0) {
           await this.device.cleanRooms(Array.from(this.roomIdsToClean));
           this.log.info(
-            `ACT setCleaning | ${
-              this.model
+            `ACT setCleaning | ${this.model
             } | Start rooms cleaning for rooms ${Array.from(
               this.roomIdsToClean
             )}, device is in state ${this.device.property("state")}.`
@@ -916,8 +921,7 @@ class XiaomiRoborockVacuum {
         } else {
           await this.device.activateCleaning();
           this.log.info(
-            `ACT setCleaning | ${
-              this.model
+            `ACT setCleaning | ${this.model
             } | Start full cleaning, device is in state ${this.device.property(
               "state"
             )}.`
@@ -926,8 +930,7 @@ class XiaomiRoborockVacuum {
       } else if (!state && (this.isCleaning || this.isPaused)) {
         // Stop cleaning
         this.log.info(
-          `ACT setCleaning | ${
-            this.model
+          `ACT setCleaning | ${this.model
           } | Stop cleaning and go to charge, device is in state ${this.device.property(
             "state"
           )}`
@@ -972,7 +975,52 @@ class XiaomiRoborockVacuum {
     }
   }
 
-  checkRoomTimeout(){
+  //Changed by Mai
+  async getGotoTarget() {
+    await this.ensureDevice('getGotoTarget');
+    this.log.info('INF getGotoTarget | ' + this.model + ' | Going to target ' + this.isGoingToTarget);
+    return this.isGoingToTarget;
+  }
+
+  //changed by Mai
+  async setGotoTarget(state, target) {
+    await this.ensureDevice('setGotoTarget');
+    this.log.info('INF | setGotoTarget | ' + this.model + ' | Go to target ' + target + ' is set to ' + state);
+    if (state) {
+      if (this.device.property('state') === 'charging' && this.config.gotoTarget) {
+        const refreshState = {
+          refresh: ['state'],
+          refreshDelay: 1000
+        };
+        await this.device.call('app_goto_target', target, refreshState);
+        this.log.info(`INF setGotoTarget | ${this.model} | Start going to target ${target}`);
+      } else {
+        this.log.warn('WARN | setGotoTarget | ' + this.model + ' | Device is not in charging state or target not defined.');
+        throw new Error('Device is not in charging state or target not defined.');
+      }
+    } else {
+      this.log.debug('DEB | setGotoTarget | ' + this.model + ' | Go back to charging station.');
+      if (this.device.property('state') === 'waiting') {
+        await this.activateCharging();
+        this.log.info(`INF setGotoTarget | ${this.model} | Going back to charging station`);
+      } else if (this.isGoingToTarget) {
+        const refreshState = {
+          refresh: ['state'],
+          refreshDelay: 1000
+        };
+        await this.device.call('app_pause', [], refreshState);
+        this.log.info(`INF setGotoTarget | ${this.model} | Pause going to target`);
+        await this.activateCharging();
+        this.log.info(`INF setGotoTarget | ${this.model} | Going back to charging station`);
+      }
+      else {
+        this.log.warn('WARN | setGotoTarget | ' + this.model + ' | Not able to return to dock because device is on the way to target.');
+        throw new Error('Not able to return to dock because device is on the way to target.');
+      }
+    }
+  }
+
+  checkRoomTimeout() {
     if (this.config.roomTimeout > 0) {
       this.log.info(`ACT setCleaningRoom | ${this.model} | Start timeout to clean rooms`);
       clearTimeout(this._roomTimeout)
@@ -1445,8 +1493,7 @@ class XiaomiRoborockVacuum {
   async getCharging() {
     const status = this.device.property("state");
     this.log.info(
-      `INF getCharging | ${this.model} | Charging is ${
-        status === "charging"
+      `INF getCharging | ${this.model} | Charging is ${status === "charging"
       } (Status is ${status})`
     );
 
@@ -1458,8 +1505,7 @@ class XiaomiRoborockVacuum {
   async getDocked() {
     const status = this.device.property("state");
     this.log.info(
-      `INF getDocked | ${this.model} | Robot Docked is ${
-        status === "charging"
+      `INF getDocked | ${this.model} | Robot Docked is ${status === "charging"
       } (Status is ${status})`
     );
 
@@ -1538,8 +1584,7 @@ class XiaomiRoborockVacuum {
     const sensorDirtyTime = this.device.property("sensorDirtyTime");
     const lifetimepercent = (sensorDirtyTime / lifetime) * 100;
     this.log.info(
-      `INF getCareSensors | ${
-        this.model
+      `INF getCareSensors | ${this.model
       } | Sensors dirtytime is ${sensorDirtyTime} seconds / ${lifetimepercent.toFixed(
         2
       )}%.`
@@ -1553,8 +1598,7 @@ class XiaomiRoborockVacuum {
     const lifetimepercent =
       (this.device.property("filterWorkTime") / lifetime) * 100;
     this.log.info(
-      `INF getCareFilter | ${
-        this.model
+      `INF getCareFilter | ${this.model
       } | Filter worktime is ${this.device.property(
         "filterWorkTime"
       )} seconds / ${lifetimepercent.toFixed(2)}%.`
@@ -1568,8 +1612,7 @@ class XiaomiRoborockVacuum {
     const lifetimepercent =
       (this.device.property("sideBrushWorkTime") / lifetime) * 100;
     this.log.info(
-      `INF getCareSideBrush | ${
-        this.model
+      `INF getCareSideBrush | ${this.model
       } | Sidebrush worktime is ${this.device.property(
         "sideBrushWorkTime"
       )} seconds / ${lifetimepercent.toFixed(2)}%.`
@@ -1583,8 +1626,7 @@ class XiaomiRoborockVacuum {
     const lifetimepercent =
       (this.device.property("mainBrushWorkTime") / lifetime) * 100;
     this.log.info(
-      `INF getCareMainBrush | ${
-        this.model
+      `INF getCareMainBrush | ${this.model
       } | Mainbrush worktime is ${this.device.property(
         "mainBrushWorkTime"
       )} seconds / ${lifetimepercent.toFixed(2)}%.`
